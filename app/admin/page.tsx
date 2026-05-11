@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { supabase } from "@/lib/supabase";
+import ResetButton from "./ResetButton";
 
 export const dynamic = "force-dynamic";
 
@@ -120,7 +121,7 @@ const FLOWS: PathFlow[] = [
 export default async function AdminPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; reset?: string }>;
 }) {
   const params = await searchParams;
   const cookieStore = await cookies();
@@ -282,6 +283,7 @@ export default async function AdminPage({
           >
             Download CSV
           </a>
+          <ResetButton />
           <form method="POST" action="/api/admin/logout">
             <button
               type="submit"
@@ -299,6 +301,16 @@ export default async function AdminPage({
         </div>
       )}
 
+            {params.reset === "ok" && (
+        <div className="mb-6 rounded-xl border border-green-300 bg-green-50 px-4 py-3 text-sm font-semibold text-green-800">
+          ✅ Database reset — all submissions and events deleted.
+        </div>
+      )}
+      {params.reset === "error" && (
+        <div className="mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
+          ⚠ Reset failed. Check Vercel logs for details.
+        </div>
+      )}
       <div className="mb-10 grid gap-4 sm:grid-cols-3">
         <SummaryCard label="Total submissions" value={total} />
         <SummaryCard
