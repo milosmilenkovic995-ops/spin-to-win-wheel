@@ -47,7 +47,7 @@ const EMAIL_TITLE = "Did the customer share their email at the end?";
 const FLOWS: PathFlow[] = [
   {
     pathId: "path1",
-    pathName: "Recent buyers (bought from us recently)",
+    pathName: "Buyers",
     questions: [
       { id: "sorting", title: SORTING_TITLE, kind: "sorting" },
       { id: "p1_q1", title: "What was the main reason you decided to buy from us?", kind: "path" },
@@ -71,7 +71,7 @@ const FLOWS: PathFlow[] = [
   },
   {
     pathId: "path3",
-    pathName: "Website visitors (did not buy)",
+    pathName: "Non Buyers",
     questions: [
       { id: "sorting", title: SORTING_TITLE, kind: "sorting" },
       { id: "p3_q1", title: "What was the main reason you did not place an order?", kind: "path" },
