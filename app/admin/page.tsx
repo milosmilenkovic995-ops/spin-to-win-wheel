@@ -37,13 +37,13 @@ type QStat = {
 };
 
 const pathLabel: Record<string, string> = {
-  sorting: "SORTING QUESTION (Page 1)",
-  path1: "PATH 1 — RECENT BUYER",
-  path2: "PATH 2 — PAST BUYER",
-  path3: "PATH 3 — WEBSITE VISITOR",
-  path4: "PATH 4 — CHECKOUT ABANDONMENT",
-  path5: "PATH 5 — COMPETITOR BUYER",
-  path6: "PATH 6 — OTHER",
+  sorting: "Page 1 — Sorting question",
+  path1: "Recent buyers (bought from us recently)",
+  path2: "Past buyers (bought before, not recently)",
+  path3: "Website visitors (did not buy)",
+  path4: "Cart abandoners (added to cart, did not checkout)",
+  path5: "Competitor buyers (buy similar from another store)",
+  path6: "Other feedback",
 };
 
 function pathOf(qid: string): string {
@@ -247,7 +247,7 @@ export default async function AdminPage({
               .sort((a, b) => b[1] - a[1])
               .map(([pid, count]) => {
                 const pct = Math.round((count / total) * 100);
-                const label = (pathLabel[pid] || pid).replace(/^PATH \d+ — /, "");
+                const label = pathLabel[pid] || pid;
                 return <Bar key={pid} label={label} count={count} pct={pct} />;
               })}
           </div>
@@ -348,7 +348,7 @@ export default async function AdminPage({
                       {new Date(s.submitted_at).toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-slate-900">
-                      {(pathLabel[s.path_id] || s.path_id).replace(/^PATH \d+ — /, "")}
+                      {pathLabel[s.path_id] || s.path_id}
                     </td>
                     <td className="px-4 py-3 text-gray-600">{s.email || "—"}</td>
                     <td className="px-4 py-3 text-gray-600">{s.submitted_via || "—"}</td>
