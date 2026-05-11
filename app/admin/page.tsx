@@ -34,6 +34,7 @@ type QStat = {
   questionTitle: string;
   total: number;
   answers: Map<string, { answerId: string; answerLabel: string; count: number }>;
+  freeTexts: string[];
 };
 
 const pathLabel: Record<string, string> = {
@@ -133,13 +134,20 @@ export default async function AdminPage({
   const withEmail = submissions.filter((s) => s.email).length;
   const emailRate = total > 0 ? Math.round((withEmail / total) * 100) : 0;
   const skipped = total - withEmail;
+  const skippedRate = total > 0 ? 100 - emailRate : 0;
 
-  // ------- Aggregate per-question answer counts -------
+  // Aggregate per-question
   const qstats = new Map<string, QStat>();
   const ensure = (id: string, title: string): QStat => {
     let q = qstats.get(id);
     if (!q) {
-      q = { questionId: id, questionTitle: title, total: 0, answers: new Map() };
+      q = {
+        questionId: id,
+        questionTitle: title,
+        total: 0,
+        answers: new Map(),
+        freeTexts: [],
+      };
       qstats.set(id, q);
     }
     return q;
@@ -161,29 +169,33 @@ export default async function AdminPage({
         "What best describes your current experience with us?"
       );
       bumpAnswer(q, s.sorting_answer_id, s.sorting_answer_label || "");
+      if (s.sorting_free_text && s.sorting_free_text.trim()) {
+        q.freeTexts.push(s.sorting_free_text.trim());
+      }
     }
     if (Array.isArray(s.answers)) {
       for (const a of s.answers as AnswerEntry[]) {
         if (!a?.questionId || !a?.answerId) continue;
         const q = ensure(a.questionId, a.questionTitle || a.questionId);
         bumpAnswer(q, a.answerId, a.answerLabel || "");
+        if (a.freeText && String(a.freeText).trim()) {
+          q.freeTexts.push(String(a.freeText).trim());
+        }
       }
     }
   }
 
-  // Group questions by path
   const grouped = new Map<string, QStat[]>();
   for (const q of qstats.values()) {
     const p = pathOf(q.questionId);
     if (!grouped.has(p)) grouped.set(p, []);
     grouped.get(p)!.push(q);
   }
-  // Sort questions inside each path by their id ascending
-  for (const arr of grouped.values()) arr.sort((a, b) => a.questionId.localeCompare(b.questionId));
+  for (const arr of grouped.values())
+    arr.sort((a, b) => a.questionId.localeCompare(b.questionId));
 
   const pathOrder = ["sorting", "path1", "path2", "path3", "path4", "path5", "path6"];
 
-  // ------- By-path summary (% of total submissions taking each path) -------
   const byPath = submissions.reduce<Record<string, number>>((acc, s) => {
     acc[s.path_id || "unknown"] = (acc[s.path_id || "unknown"] || 0) + 1;
     return acc;
@@ -196,9 +208,7 @@ export default async function AdminPage({
       <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Survey Dashboard</h1>
-          <p className="text-sm text-gray-500">
-            Live data from your customer feedback survey.
-          </p>
+          <p className="text-sm text-gray-500">Live data from your customer feedback survey.</p>
         </div>
         <div className="flex gap-2">
           <a
@@ -228,16 +238,20 @@ export default async function AdminPage({
       <div className="mb-8 grid gap-4 sm:grid-cols-3">
         <SummaryCard label="Total submissions" value={total} />
         <SummaryCard
-          label="Email captured (30%)"
+          label="Got 30% off (gave email)"
           value={withEmail}
-          sub={`${emailRate}% capture rate`}
+          sub={`${emailRate}% of all submissions`}
           highlight
         />
-        <SummaryCard label="Skipped email (20%)" value={skipped} />
+        <SummaryCard
+          label="Got 20% off (skipped)"
+          value={skipped}
+          sub={`${skippedRate}% of all submissions`}
+        />
       </div>
 
-      {/* Submissions by path */}
-      <section className="mb-10 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      {/* By path */}
+      <section className="mb-12 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-lg font-bold text-slate-900">Submissions by path</h2>
         {total === 0 ? (
           <div className="text-sm text-gray-500">No submissions yet.</div>
@@ -247,70 +261,108 @@ export default async function AdminPage({
               .sort((a, b) => b[1] - a[1])
               .map(([pid, count]) => {
                 const pct = Math.round((count / total) * 100);
-                const label = pathLabel[pid] || pid;
-                return <Bar key={pid} label={label} count={count} pct={pct} />;
+                return (
+                  <Bar
+                    key={pid}
+                    label={pathLabel[pid] || pid}
+                    count={count}
+                    pct={pct}
+                    wide
+                  />
+                );
               })}
           </div>
         )}
       </section>
 
       {/* Per-question breakdowns */}
-      <section className="mb-10">
+      <section className="mb-12">
         <h2 className="mb-2 text-2xl font-extrabold text-slate-900">
           Answer breakdowns by question
         </h2>
-        <p className="mb-6 text-sm text-gray-500">
-          For every question, all answer options ranked by popularity, with raw
-          count and percentage of people who reached that question.
+        <p className="mb-8 text-sm text-gray-500">
+          For every block of questions, you&apos;ll see who chose what, how many
+          times (in parentheses), the percentage, and every free-text comment
+          customers wrote.
         </p>
+
         {total === 0 ? (
           <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-500">
-            No submissions yet — answer breakdowns will appear here as customers
-            complete the survey.
+            No submissions yet — breakdowns appear here as data comes in.
           </div>
         ) : (
-          <div className="space-y-8">
+          <div className="space-y-12">
             {pathOrder.map((p) => {
               const qs = grouped.get(p) || [];
               if (qs.length === 0) return null;
+              const blockSubs = p === "sorting" ? total : byPath[p] || 0;
               return (
-                <div
-                  key={p}
-                  className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
-                >
-                  <div className="border-b border-gray-200 bg-gray-50 px-6 py-3 text-xs font-extrabold uppercase tracking-[0.15em] text-green-700">
-                    {pathLabel[p] || p}
+                <div key={p}>
+                  {/* Big block header */}
+                  <div className="mb-4 rounded-t-2xl bg-green-700 px-6 py-4 text-white shadow-sm">
+                    <div className="text-xs font-bold uppercase tracking-widest text-green-100">
+                      {p === "sorting" ? "Block: Sorting" : `Block: Path`}
+                    </div>
+                    <div className="text-xl font-extrabold md:text-2xl">
+                      {pathLabel[p] || p}
+                    </div>
+                    <div className="mt-1 text-xs text-green-100">
+                      {blockSubs} submission{blockSubs === 1 ? "" : "s"} reached this block
+                    </div>
                   </div>
-                  <div className="divide-y divide-gray-100">
+
+                  <div className="space-y-5 rounded-b-2xl border border-t-0 border-green-200 bg-white p-5">
                     {qs.map((q, qi) => {
                       const sorted = Array.from(q.answers.values()).sort(
                         (a, b) => b.count - a.count
                       );
                       return (
-                        <div key={q.questionId} className="px-6 py-5">
-                          <div className="mb-3">
-                            <div className="text-xs font-bold tracking-wider text-gray-400">
-                              QUESTION {qi + 1} • {q.total} responses
-                            </div>
-                            <h3 className="text-base font-bold text-slate-900 md:text-lg">
-                              {q.questionTitle}
-                            </h3>
+                        <div
+                          key={q.questionId}
+                          className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm"
+                        >
+                          <div className="mb-1 text-[11px] font-bold uppercase tracking-widest text-gray-400">
+                            Question {qi + 1} · {q.total} response
+                            {q.total === 1 ? "" : "s"}
                           </div>
+                          <h3 className="mb-4 text-lg font-extrabold text-slate-900 md:text-xl">
+                            {q.questionTitle}
+                          </h3>
+
                           <div className="space-y-2">
                             {sorted.map((a) => {
                               const pct =
-                                q.total > 0 ? Math.round((a.count / q.total) * 100) : 0;
+                                q.total > 0
+                                  ? Math.round((a.count / q.total) * 100)
+                                  : 0;
                               return (
                                 <Bar
                                   key={a.answerId}
                                   label={a.answerLabel}
                                   count={a.count}
                                   pct={pct}
-                                  small
                                 />
                               );
                             })}
                           </div>
+
+                          {q.freeTexts.length > 0 && (
+                            <div className="mt-5 rounded-xl bg-gray-50 p-4">
+                              <div className="mb-2 text-xs font-extrabold uppercase tracking-wider text-gray-500">
+                                Written comments ({q.freeTexts.length})
+                              </div>
+                              <ul className="space-y-2">
+                                {q.freeTexts.map((t, i) => (
+                                  <li
+                                    key={i}
+                                    className="border-l-2 border-green-600 pl-3 text-sm italic text-slate-700"
+                                  >
+                                    &ldquo;{t}&rdquo;
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -337,7 +389,7 @@ export default async function AdminPage({
                   <th className="px-4 py-3">When</th>
                   <th className="px-4 py-3">Path</th>
                   <th className="px-4 py-3">Email</th>
-                  <th className="px-4 py-3">Via</th>
+                  <th className="px-4 py-3">Choice</th>
                   <th className="px-4 py-3">Coupon</th>
                 </tr>
               </thead>
@@ -351,7 +403,13 @@ export default async function AdminPage({
                       {pathLabel[s.path_id] || s.path_id}
                     </td>
                     <td className="px-4 py-3 text-gray-600">{s.email || "—"}</td>
-                    <td className="px-4 py-3 text-gray-600">{s.submitted_via || "—"}</td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {s.submitted_via === "email"
+                        ? "Gave email → 30%"
+                        : s.submitted_via === "skip"
+                        ? "Skipped → 20%"
+                        : "—"}
+                    </td>
                     <td className="px-4 py-3 text-gray-600">{s.coupon_code || "—"}</td>
                   </tr>
                 ))}
@@ -360,19 +418,6 @@ export default async function AdminPage({
           </div>
         )}
       </section>
-
-      <div className="text-xs text-gray-500">
-        Free-text answers and full submission detail in the{" "}
-        <a
-          href="https://supabase.com/dashboard"
-          target="_blank"
-          rel="noreferrer"
-          className="underline"
-        >
-          Supabase Table Editor
-        </a>
-        .
-      </div>
     </main>
   );
 }
@@ -409,7 +454,9 @@ function SummaryCard({
         {value}
       </div>
       {sub && (
-        <div className={`mt-1 text-xs ${highlight ? "text-green-800" : "text-gray-500"}`}>
+        <div
+          className={`mt-1 text-xs ${highlight ? "text-green-800" : "text-gray-500"}`}
+        >
           {sub}
         </div>
       )}
@@ -421,38 +468,28 @@ function Bar({
   label,
   count,
   pct,
-  small,
+  wide,
 }: {
   label: string;
   count: number;
   pct: number;
-  small?: boolean;
+  wide?: boolean;
 }) {
   return (
     <div className="flex items-center gap-3">
       <div
-        className={`${
-          small ? "w-56 text-sm" : "w-44 text-sm font-medium"
-        } shrink-0 text-slate-700`}
+        className={`${wide ? "w-72" : "w-64"} shrink-0 text-sm font-medium text-slate-800`}
       >
         {label}
       </div>
-      <div
-        className={`${
-          small ? "h-5" : "h-7"
-        } flex-1 overflow-hidden rounded-full bg-gray-100`}
-      >
+      <div className="h-6 flex-1 overflow-hidden rounded-full bg-gray-100">
         <div
           className="h-full rounded-full bg-green-600"
           style={{ width: `${pct}%` }}
         />
       </div>
-      <div
-        className={`w-28 shrink-0 text-right text-sm tabular-nums ${
-          small ? "text-gray-600" : "text-slate-700"
-        }`}
-      >
-        {count} ({pct}%)
+      <div className="w-24 shrink-0 text-right text-sm tabular-nums text-slate-700">
+        <span className="font-bold">({count})</span> {pct}%
       </div>
     </div>
   );
