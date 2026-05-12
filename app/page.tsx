@@ -8,7 +8,7 @@ export default function Page() {
       <Header />
       <MiddleSection
         title="Help us serve you better"
-        subtitle="Share a few quick thoughts about your shopping experience. As a thank-you for completing the survey, you'll get 20% off your next order 🎁"
+        subtitle="Your feedback helps us improve the website and make your experience better. The survey takes about 60 seconds to complete. As a thank-you, you'll get a 20% off discount code at the end 🎁"
       />
       <Footer />
     </div>

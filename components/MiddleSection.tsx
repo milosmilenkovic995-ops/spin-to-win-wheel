@@ -2,329 +2,129 @@
 import { useEffect, useMemo, useState } from "react";
 
 type MCAnswer = { id: string; label: string };
-type Question = { id: string; title: string; answers: MCAnswer[]; freeTextLabel: string };
-type SurveyPath = { id: string; name: string; emoji: string; goal: string; questions: Question[] };
+type QuestionType = "multi" | "single" | "text";
+type Question = {
+  id: string;
+  title: string;
+  type: QuestionType;
+  answers?: MCAnswer[];
+};
 type MiddleSectionProps = { title: string; subtitle: string };
 
-const COUPON_WITH_EMAIL = "FEEDBACK30";
-const COUPON_NO_EMAIL = "FEEDBACK20";
+const COUPON = "FEEDBACK20";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const sortingQuestion: Question = {
-  id: "sorting",
-  title: "What best describes your current experience with us?",
-  answers: [
-    { id: "bought_recently", label: "I bought recently" },
-    { id: "bought_before", label: "I bought before, but not recently" },
-    { id: "visited_no_buy", label: "I visited the website but did not buy" },
-    { id: "cart_abandoned", label: "I added products to my cart but did not complete checkout" },
-    { id: "competitor", label: "I usually buy similar products from another store" },
-    { id: "other", label: "Other" },
-  ],
-  freeTextLabel: "Tell us more about your answer.",
-};
-
-const pathRouting: Record<string, string> = {
-  bought_recently: "path1",
-  bought_before: "path2",
-  visited_no_buy: "path3",
-  cart_abandoned: "path4",
-  competitor: "path5",
-  other: "path6",
-};
-
-const path1: SurveyPath = {
-  id: "path1", name: "Recent Buyer", emoji: "\u{1F49A}",
-  goal: "Learn why you bought and what would make you buy more often.",
-  questions: [
-    { id: "p1_q1", title: "What was the main reason you decided to buy from us?",
-      answers: [
-        { id: "quality", label: "Product quality" },
-        { id: "organic", label: "Organic or natural ingredients" },
-        { id: "selection", label: "Product selection" },
-        { id: "price", label: "Price or discount" },
-        { id: "trust", label: "Trust in the brand" },
-        { id: "reviews", label: "Reviews" },
-        { id: "found_it", label: "I found exactly what I needed" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us more about why you decided to buy." },
-    { id: "p1_q2", title: "Was there anything that made you hesitate before buying?",
-      answers: [
-        { id: "no", label: "No, everything was clear" },
-        { id: "price", label: "Price" },
-        { id: "shipping_cost", label: "Shipping cost" },
-        { id: "delivery_time", label: "Delivery time" },
-        { id: "unclear_info", label: "Product information was not clear enough" },
-        { id: "more_reviews", label: "I wanted more reviews" },
-        { id: "comparing", label: "I was comparing with another store" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us what made you hesitate." },
-    { id: "p1_q3", title: "What would make you buy from us more often?",
-      answers: [
-        { id: "better_discounts", label: "Better discounts" },
-        { id: "lower_shipping", label: "Lower shipping cost" },
-        { id: "faster_delivery", label: "Faster delivery" },
-        { id: "more_education", label: "More product education" },
-        { id: "bundles", label: "More bundle offers" },
-        { id: "subscriptions", label: "Subscription options" },
-        { id: "recommendations", label: "Better product recommendations" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us what would make you order more often." },
-    { id: "p1_q4", title: "What could we improve about your shopping experience?",
-      answers: [
-        { id: "navigation", label: "Website navigation" },
-        { id: "product_pages", label: "Product pages" },
-        { id: "product_images", label: "Product images" },
-        { id: "checkout", label: "Checkout process" },
-        { id: "shipping_info", label: "Shipping information" },
-        { id: "discounts", label: "Discounts/offers" },
-        { id: "nothing", label: "Nothing, everything was good" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us what we could improve." },
-  ],
-};
-
-const path2: SurveyPath = {
-  id: "path2", name: "Past Buyer", emoji: "\u{1F501}",
-  goal: "Learn why you stopped buying and what would bring you back.",
-  questions: [
-    { id: "p2_q1", title: "Why have you not ordered from us recently?",
-      answers: [
-        { id: "have_enough", label: "I still have enough product" },
-        { id: "price", label: "Price is too high" },
-        { id: "shipping_cost", label: "Shipping cost is too high" },
-        { id: "other_store", label: "I bought from another store" },
-        { id: "forgot", label: "I forgot about the brand" },
-        { id: "no_need", label: "I did not need the product again yet" },
-        { id: "issue", label: "I had an issue with my previous order" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us more about why you have not ordered recently." },
-    { id: "p2_q2", title: "Are you currently buying similar products somewhere else?",
-      answers: [
-        { id: "amazon", label: "Yes, from Amazon" },
-        { id: "walmart", label: "Yes, from Walmart" },
-        { id: "iherb", label: "Yes, from iHerb" },
-        { id: "local", label: "Yes, from a local health store" },
-        { id: "other_brand", label: "Yes, from another brand website" },
-        { id: "no", label: "No, I am not buying similar products right now" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Where do you usually buy now, and why?" },
-    { id: "p2_q3", title: "What would make you come back and order again?",
-      answers: [
-        { id: "discount", label: "A better discount" },
-        { id: "free_shipping", label: "Free or lower-cost shipping" },
-        { id: "faster_delivery", label: "Faster delivery" },
-        { id: "new_products", label: "New products" },
-        { id: "recommendations", label: "Better product recommendations" },
-        { id: "trust", label: "More trust or product information" },
-        { id: "reminder", label: "A reminder when I may need to reorder" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us what would make you buy again." },
-    { id: "p2_q4", title: "Was there anything from your previous experience that could have been better?",
-      answers: [
-        { id: "quality", label: "Product quality" },
-        { id: "packaging", label: "Product packaging" },
-        { id: "delivery_time", label: "Delivery time" },
-        { id: "shipping_cost", label: "Shipping cost" },
-        { id: "support", label: "Customer support" },
-        { id: "website", label: "Website experience" },
-        { id: "nothing", label: "Nothing, my experience was good" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us what could have been better." },
-  ],
-};
-
-const path3: SurveyPath = {
-  id: "path3", name: "Website Visitor", emoji: "\u{1F440}",
-  goal: "Learn what stopped you before purchase.",
-  questions: [
-    { id: "p3_q1", title: "What was the main reason you did not place an order?",
-      answers: [
-        { id: "price", label: "Price was too high" },
-        { id: "shipping_cost", label: "Shipping cost was too high" },
-        { id: "not_ready", label: "I was not ready to buy" },
-        { id: "more_info", label: "I needed more product information" },
-        { id: "confidence", label: "I did not feel confident enough" },
-        { id: "wrong_product", label: "I could not find the right product" },
-        { id: "elsewhere", label: "I decided to buy somewhere else" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us more about what stopped you." },
-    { id: "p3_q2", title: "Was anything confusing on the website?",
-      answers: [
-        { id: "no", label: "No, the website was clear" },
-        { id: "hard_find", label: "It was hard to find products" },
-        { id: "unclear_pages", label: "Product pages were not clear enough" },
-        { id: "right_product", label: "I was not sure which product was right for me" },
-        { id: "checkout", label: "Checkout or cart was confusing" },
-        { id: "shipping_pricing", label: "Shipping or pricing was unclear" },
-        { id: "too_busy", label: "The website felt too busy" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us what felt confusing." },
-    { id: "p3_q3", title: "What information was missing before you could feel ready to buy?",
-      answers: [
-        { id: "product_details", label: "More product details" },
-        { id: "ingredients", label: "More ingredient information" },
-        { id: "reviews", label: "More reviews" },
-        { id: "usage", label: "More usage instructions" },
-        { id: "comparisons", label: "More product comparisons" },
-        { id: "quality", label: "More quality/testing information" },
-        { id: "shipping_returns", label: "More shipping/return information" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us what information would help you most." },
-    { id: "p3_q4", title: "What would have made you more likely to complete your purchase?",
-      answers: [
-        { id: "discount", label: "Better discount" },
-        { id: "free_shipping", label: "Free shipping" },
-        { id: "faster_delivery", label: "Faster delivery" },
-        { id: "reviews", label: "More reviews" },
-        { id: "benefits", label: "Clearer product benefits" },
-        { id: "recommendations", label: "Better product recommendations" },
-        { id: "trust", label: "More trust in the brand" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us what would have helped you buy." },
-  ],
-};
-
-const path4: SurveyPath = {
-  id: "path4", name: "Checkout Abandonment", emoji: "\u{1F6D2}",
-  goal: "Learn what stopped you at the final step.",
-  questions: [
-    { id: "p4_q1", title: "What made you leave before completing checkout?",
-      answers: [
-        { id: "shipping_cost", label: "Shipping cost was too high" },
-        { id: "total_price", label: "Total price was higher than expected" },
-        { id: "delivery_time", label: "Delivery time was too long" },
-        { id: "comparing", label: "I wanted to compare prices" },
-        { id: "distracted", label: "I got distracted and forgot" },
-        { id: "difficult", label: "Checkout process felt difficult" },
-        { id: "technical", label: "I had a technical issue" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us what happened at checkout." },
-    { id: "p4_q2", title: "Did anything surprise you in the cart or checkout?",
-      answers: [
-        { id: "no", label: "No, nothing surprised me" },
-        { id: "shipping_cost", label: "Shipping cost" },
-        { id: "taxes_fees", label: "Taxes or extra fees" },
-        { id: "total", label: "Final total price" },
-        { id: "delivery_time", label: "Delivery time" },
-        { id: "discount_code", label: "Discount code did not work" },
-        { id: "payment", label: "Payment issue" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us what surprised you." },
-    { id: "p4_q3", title: "What would have made you complete the order?",
-      answers: [
-        { id: "free_shipping", label: "Free shipping" },
-        { id: "discount", label: "Better discount" },
-        { id: "faster_delivery", label: "Faster delivery" },
-        { id: "clearer_total", label: "Clearer total price earlier" },
-        { id: "easier_checkout", label: "Easier checkout" },
-        { id: "payment_options", label: "More payment options" },
-        { id: "reminder", label: "Reminder email or SMS" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us what would have helped you finish the order." },
-  ],
-};
-
-const path5: SurveyPath = {
-  id: "path5", name: "Competitor Buyer", emoji: "\u{1F3C6}",
-  goal: "Learn where you buy and what those stores do better.",
-  questions: [
-    { id: "p5_q1", title: "Where do you usually buy similar products?",
-      answers: [
-        { id: "amazon", label: "Amazon" },
-        { id: "walmart", label: "Walmart" },
-        { id: "iherb", label: "iHerb" },
-        { id: "thrive", label: "Thrive Market" },
-        { id: "local", label: "Local health food store" },
-        { id: "other_brand", label: "Another brand website" },
-        { id: "rarely", label: "I do not buy similar products often" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us where you usually buy." },
-    { id: "p5_q2", title: "Why do you choose that store?",
-      answers: [
-        { id: "lower_prices", label: "Lower prices" },
-        { id: "faster_shipping", label: "Faster shipping" },
-        { id: "free_shipping", label: "Free shipping" },
-        { id: "selection", label: "Better product selection" },
-        { id: "experience", label: "Easier shopping experience" },
-        { id: "reviews", label: "More reviews" },
-        { id: "trust", label: "More trust in the store" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us why you prefer that store." },
-    { id: "p5_q3", title: "What does that store do better than us?",
-      answers: [
-        { id: "prices", label: "Better prices" },
-        { id: "shipping", label: "Better shipping" },
-        { id: "website", label: "Better website experience" },
-        { id: "info", label: "Better product information" },
-        { id: "reviews", label: "Better reviews" },
-        { id: "recommendations", label: "Better recommendations" },
-        { id: "offers", label: "Better offers or subscriptions" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us what they do better." },
-    { id: "p5_q4", title: "What would make you choose us instead?",
-      answers: [
-        { id: "discount", label: "Better discount" },
-        { id: "shipping", label: "Free or faster shipping" },
-        { id: "website", label: "Easier website experience" },
-        { id: "education", label: "More product education" },
-        { id: "recommendations", label: "Better product recommendations" },
-        { id: "trust", label: "More trust-building information" },
-        { id: "bundles", label: "Better bundles or subscriptions" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us what would make you choose us." },
-  ],
-};
-
-const path6: SurveyPath = {
-  id: "path6", name: "Other", emoji: "\u{1F4AD}",
-  goal: "Capture anything that does not fit the main paths.",
-  questions: [
-    { id: "p6_q1", title: "What best describes your situation?",
-      answers: [
-        { id: "not_ready", label: "I am interested but not ready to buy" },
-        { id: "more_info", label: "I need more information" },
-        { id: "comparing", label: "I am comparing options" },
-        { id: "website_issue", label: "I had an issue on the website" },
-        { id: "not_interested", label: "I am not interested right now" },
-        { id: "already_buy", label: "I already buy from you" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us more about your situation." },
-    { id: "p6_q2", title: "What could we improve for you?",
-      answers: [
-        { id: "info", label: "Product information" },
-        { id: "pricing", label: "Pricing" },
-        { id: "shipping", label: "Shipping" },
-        { id: "website", label: "Website experience" },
-        { id: "selection", label: "Product selection" },
-        { id: "reviews", label: "Trust and reviews" },
-        { id: "offers", label: "Offers and discounts" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Tell us what we could improve." },
-    { id: "p6_q3", title: "Is there anything else you want to share?",
-      answers: [
-        { id: "website", label: "Yes, I have feedback about the website" },
-        { id: "products", label: "Yes, I have feedback about products" },
-        { id: "pricing_shipping", label: "Yes, I have feedback about pricing or shipping" },
-        { id: "buying", label: "Yes, I have feedback about the buying process" },
-        { id: "no", label: "No, nothing else" },
-        { id: "other", label: "Other" },
-      ], freeTextLabel: "Write your feedback here." },
-  ],
-};
-
-const allPaths: Record<string, SurveyPath> = { path1, path2, path3, path4, path5, path6 };
+const questions: Question[] = [
+  {
+    id: "q1",
+    title: "What are the biggest areas where we can improve?",
+    type: "multi",
+    answers: [
+      { id: "quality", label: "Quality of product" },
+      { id: "price", label: "Price" },
+      { id: "ux", label: "User experience on the website" },
+      { id: "checkout", label: "Checkout process" },
+      { id: "payment", label: "Payment process" },
+      { id: "shipping", label: "Shipping and delivery" },
+      { id: "packaging", label: "Packaging" },
+      { id: "branding", label: "Branding and design" },
+      { id: "customer_service", label: "Customer service" },
+      { id: "speed", label: "Website speed / loading times" },
+      { id: "info", label: "Product information and descriptions" },
+      { id: "other", label: "Other (please specify)" },
+    ],
+  },
+  {
+    id: "q2",
+    title: "When browsing our website, what frustrates you the most?",
+    type: "multi",
+    answers: [
+      { id: "slow", label: "Pages load too slowly" },
+      { id: "hard_find", label: "Hard to find what I'm looking for" },
+      { id: "menu", label: "Navigation menu is confusing" },
+      { id: "search", label: "Search function doesn't return good results" },
+      { id: "popups", label: "Too many pop-ups or distractions" },
+      { id: "mobile", label: "Site doesn't work well on mobile" },
+      { id: "images", label: "Images load slowly or look low quality" },
+      { id: "nothing", label: "Nothing — the site works fine for me" },
+      { id: "other", label: "Other (please specify)" },
+    ],
+  },
+  {
+    id: "q3",
+    title: "On our product pages, what's missing or could be better?",
+    type: "multi",
+    answers: [
+      { id: "photos_count", label: "Not enough product photos" },
+      { id: "photos_clarity", label: "Photos don't show the product clearly" },
+      { id: "descriptions", label: "Product descriptions lack detail" },
+      { id: "sizing", label: "Sizing or dimensions are unclear" },
+      { id: "reviews", label: "No customer reviews visible" },
+      { id: "pricing", label: "Price or discounts aren't clear" },
+      { id: "shipping_info", label: "Shipping info isn't visible early enough" },
+      { id: "stock", label: "Stock availability is unclear" },
+      { id: "compare", label: "Hard to compare similar products" },
+      { id: "other", label: "Other (please specify)" },
+    ],
+  },
+  {
+    id: "q4",
+    title: "If you've ever started a checkout but didn't finish, what stopped you?",
+    type: "multi",
+    answers: [
+      { id: "shipping_cost", label: "Shipping cost was too high" },
+      { id: "shipping_time", label: "Shipping time was too long" },
+      { id: "payment_options", label: "Limited payment options" },
+      { id: "account", label: "Had to create an account" },
+      { id: "form", label: "Checkout form was too long or complicated" },
+      { id: "error", label: "Site crashed or had an error" },
+      { id: "discount", label: "Couldn't apply a discount code" },
+      { id: "not_ready", label: "I just wasn't ready to buy yet" },
+      { id: "never", label: "I've never abandoned a checkout" },
+      { id: "other", label: "Other (please specify)" },
+    ],
+  },
+  {
+    id: "q5",
+    title: "How would you rate the speed and performance of our website?",
+    type: "single",
+    answers: [
+      { id: "excellent", label: "Excellent — everything loads instantly" },
+      { id: "good", label: "Good — minor delays sometimes" },
+      { id: "average", label: "Average — noticeable but tolerable" },
+      { id: "poor", label: "Poor — slow enough to frustrate me" },
+      { id: "very_poor", label: "Very poor — often unusable" },
+    ],
+  },
+  {
+    id: "q6",
+    title: "Which device do you mostly use to browse our website, and how is the experience?",
+    type: "single",
+    answers: [
+      { id: "mobile_ok", label: "Mobile — works well" },
+      { id: "mobile_issues", label: "Mobile — has issues" },
+      { id: "desktop_ok", label: "Desktop / laptop — works well" },
+      { id: "desktop_issues", label: "Desktop / laptop — has issues" },
+      { id: "tablet_ok", label: "Tablet — works well" },
+      { id: "tablet_issues", label: "Tablet — has issues" },
+    ],
+  },
+  {
+    id: "q7",
+    title: "If there's one thing you could change about our website to make it better, what would it be?",
+    type: "text",
+  },
+];
 
 function ProgressDots({ current, total }: { current: number; total: number }) {
-  const items = Array.from({ length: total }, (_, i) => i + 1);
   return (
     <div className="mt-6 flex flex-wrap items-center justify-center gap-y-2">
-      {items.map((item, i) => {
+      {Array.from({ length: total }, (_, i) => i + 1).map((item, i) => {
         const active = item <= current;
         return (
           <div key={item} className="flex items-center">
             <div className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-bold ${active ? "border-green-700 bg-green-700 text-white" : "border-gray-300 bg-white text-gray-400"}`}>{item}</div>
-            {i < items.length - 1 && (<div className={`h-[2px] w-8 ${item < current ? "bg-green-700" : "bg-gray-300"}`} />)}
+            {i < total - 1 && (<div className={`h-[2px] w-8 ${item < current ? "bg-green-700" : "bg-gray-300"}`} />)}
           </div>
         );
       })}
@@ -332,195 +132,168 @@ function ProgressDots({ current, total }: { current: number; total: number }) {
   );
 }
 
-function QuestionCard({ question, index, total, selected, freeText, onSelect, onFreeTextChange }: { question: Question; index: number; total: number; selected: string; freeText: string; onSelect: (id: string) => void; onFreeTextChange: (text: string) => void; }) {
-  return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-7 shadow-sm md:p-9">
-      <div className="mb-3 text-xs font-extrabold tracking-[0.18em] text-green-700">QUESTION {index} OF {total}</div>
-      <h2 className="mb-7 text-2xl font-extrabold text-slate-900 md:text-3xl">{question.title}</h2>
-      <div className="grid gap-3 md:grid-cols-2">
-        {question.answers.map((answer) => {
-          const isSelected = selected === answer.id;
-          return (
-            <button key={answer.id} type="button" onClick={() => onSelect(answer.id)} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${isSelected ? "border-green-700 bg-green-50 shadow-sm" : "border-gray-200 bg-white hover:border-green-600 hover:shadow-sm"}`}>
-              <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${isSelected ? "border-green-700 bg-green-700" : "border-gray-300 bg-white"}`}>
-                {isSelected && (<span className="h-2 w-2 rounded-full bg-white" />)}
-              </span>
-              <span className="text-[15px] font-medium text-slate-900">{answer.label}</span>
-            </button>
-          );
-        })}
-      </div>
-      <div className="mt-6">
-        <label className="mb-2 block text-sm font-semibold text-slate-700">{question.freeTextLabel} <span className="font-normal text-gray-400">(optional)</span></label>
-        <textarea value={freeText} onChange={(e) => onFreeTextChange(e.target.value)} rows={3} className="w-full resize-y rounded-xl border border-gray-300 px-4 py-3 text-[15px] outline-none focus:border-green-600" placeholder="Add a few words here..." />
-      </div>
-    </section>
-  );
-}
-
 export default function MiddleSection({ title, subtitle }: MiddleSectionProps) {
   const [step, setStep] = useState(1);
   const [done, setDone] = useState(false);
-  const [pathId, setPathId] = useState<string>("");
-  const [sortingAnswer, setSortingAnswer] = useState<string>("");
-  const [sortingFreeText, setSortingFreeText] = useState("");
-  const [pathAnswers, setPathAnswers] = useState<Record<string, { mc: string; text: string }>>({});
+
+  // For multi-select: question id -> array of selected answer ids
+  const [multi, setMulti] = useState<Record<string, string[]>>({});
+  // For single-select: question id -> selected answer id
+  const [single, setSingle] = useState<Record<string, string>>({});
+  // Text answer for text-only questions
+  const [textAns, setTextAns] = useState<Record<string, string>>({});
+  // Optional "Add a few words" free-text per MC question
+  const [freeTexts, setFreeTexts] = useState<Record<string, string>>({});
+
   const [email, setEmail] = useState("");
   const [klid, setKlid] = useState("");
   const [emailFromUrl, setEmailFromUrl] = useState(false);
   const [error, setError] = useState("");
-  const [submittedWithEmail, setSubmittedWithEmail] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    const e = params.get("email") || "";
-    const k = params.get("klid") || params.get("kl_id") || "";
+    const p = new URLSearchParams(window.location.search);
+    const e = p.get("email") || "";
+    const k = p.get("klid") || p.get("kl_id") || "";
     if (e) { setEmail(e); setEmailFromUrl(true); }
     if (k) setKlid(k);
   }, []);
 
-  const activePath = useMemo(() => (pathId ? allPaths[pathId] : undefined), [pathId]);
-  const pathQCount = activePath?.questions.length ?? 4;
-  const totalSteps = 1 + pathQCount + (emailFromUrl ? 0 : 1);
-  const emailStep = emailFromUrl ? null : 1 + pathQCount + 1;
-  const isEmailStep = emailStep !== null && step === emailStep;
+  const totalQ = questions.length; // 7
+  const totalSteps = totalQ + (emailFromUrl ? 0 : 1); // +1 for email page
+  const isEmailStep = !emailFromUrl && step === totalSteps;
   const isFinalStep = step === totalSteps;
-  const hasValidEmail = email.trim().length > 0 && EMAIL_REGEX.test(email.trim());
-  const usedEmailAtSubmit = submittedWithEmail !== null ? submittedWithEmail : hasValidEmail;
-  const finalCoupon = usedEmailAtSubmit ? COUPON_WITH_EMAIL : COUPON_NO_EMAIL;
-  const finalDiscountLabel = usedEmailAtSubmit ? "30% OFF" : "20% OFF";
+  const currentQ = step <= totalQ ? questions[step - 1] : null;
 
   const scrollTop = () => { if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); };
 
-  const handleSortingSelect = (id: string) => {
-    setSortingAnswer(id);
-    setError("");
-    const nextPath = pathRouting[id];
-    if (nextPath) { setPathId(nextPath); setPathAnswers({}); }
-  };
-
-  const handlePathAnswerSelect = (questionId: string, answerId: string) => {
-    setPathAnswers((prev) => ({ ...prev, [questionId]: { mc: answerId, text: prev[questionId]?.text ?? "" } }));
+  const toggleMulti = (qid: string, aid: string) => {
+    setMulti((prev) => {
+      const set = new Set(prev[qid] || []);
+      if (set.has(aid)) set.delete(aid); else set.add(aid);
+      return { ...prev, [qid]: Array.from(set) };
+    });
     setError("");
   };
-
-  const handlePathFreeTextChange = (questionId: string, text: string) => {
-    setPathAnswers((prev) => ({ ...prev, [questionId]: { mc: prev[questionId]?.mc ?? "", text } }));
+  const pickSingle = (qid: string, aid: string) => {
+    setSingle((prev) => ({ ...prev, [qid]: aid }));
+    setError("");
   };
+  const setFreeText = (qid: string, t: string) => setFreeTexts((prev) => ({ ...prev, [qid]: t }));
+  const setText = (qid: string, t: string) => setTextAns((prev) => ({ ...prev, [qid]: t }));
 
-  const validateCurrentStep = (): boolean => {
-    if (step === 1) {
-      if (!sortingAnswer) { setError("Please choose an option to continue."); return false; }
-      return true;
+  const validate = (): boolean => {
+    if (!currentQ) return true; // email step, no validation
+    if (currentQ.type === "multi") {
+      if (!multi[currentQ.id] || multi[currentQ.id].length === 0) {
+        setError("Please select at least one option to continue.");
+        return false;
+      }
+    } else if (currentQ.type === "single") {
+      if (!single[currentQ.id]) {
+        setError("Please pick one option to continue.");
+        return false;
+      }
     }
-    if (step >= 2 && step <= 1 + pathQCount && activePath) {
-      const q = activePath.questions[step - 2];
-      if (!pathAnswers[q.id]?.mc) { setError("Please choose an option to continue."); return false; }
-      return true;
-    }
+    // text type: optional, no validation
     return true;
   };
 
-  const buildPayload = (withEmail: boolean) => {
-    if (!activePath) return null;
+  const buildPayload = () => {
     return {
-      email: withEmail ? email.trim() || null : null,
+      email: email.trim() || null,
       klid: klid.trim() || null,
-      path: activePath.id,
-      pathName: activePath.name,
-      submittedVia: withEmail ? "email" : "skip",
-      coupon: withEmail ? COUPON_WITH_EMAIL : COUPON_NO_EMAIL,
-      discount: withEmail ? "30% OFF" : "20% OFF",
-      sorting: {
-        questionId: sortingQuestion.id,
-        questionTitle: sortingQuestion.title,
-        answerId: sortingAnswer,
-        answerLabel: sortingQuestion.answers.find((a) => a.id === sortingAnswer)?.label || "",
-        freeText: sortingFreeText.trim() || null,
-      },
-      answers: activePath.questions.map((q) => {
-        const stored = pathAnswers[q.id];
-        return {
-          questionId: q.id,
-          questionTitle: q.title,
-          answerId: stored?.mc || "",
-          answerLabel: q.answers.find((a) => a.id === stored?.mc)?.label || "",
-          freeText: stored?.text?.trim() || null,
-        };
+      path: "main_v2",
+      pathName: "Customer Feedback Survey",
+      submittedVia: email.trim() ? "email" : "skip",
+      coupon: COUPON,
+      discount: "20% OFF",
+      sorting: null,
+      answers: questions.map((q) => {
+        if (q.type === "multi") {
+          const ids = multi[q.id] || [];
+          const labels = ids.map((id) => q.answers!.find((a) => a.id === id)?.label || id);
+          return {
+            questionId: q.id,
+            questionTitle: q.title,
+            questionType: "multi",
+            answerIds: ids,
+            answerLabels: labels,
+            answerId: ids[0] || "",
+            answerLabel: labels[0] || "",
+            freeText: (freeTexts[q.id] || "").trim() || null,
+          };
+        } else if (q.type === "single") {
+          const id = single[q.id] || "";
+          const label = q.answers!.find((a) => a.id === id)?.label || "";
+          return {
+            questionId: q.id,
+            questionTitle: q.title,
+            questionType: "single",
+            answerIds: id ? [id] : [],
+            answerLabels: label ? [label] : [],
+            answerId: id,
+            answerLabel: label,
+            freeText: (freeTexts[q.id] || "").trim() || null,
+          };
+        } else {
+          return {
+            questionId: q.id,
+            questionTitle: q.title,
+            questionType: "text",
+            answerIds: [],
+            answerLabels: [],
+            answerId: "",
+            answerLabel: "",
+            freeText: (textAns[q.id] || "").trim() || null,
+          };
+        }
       }),
       submittedAt: new Date().toISOString(),
     };
   };
 
-  const handleSubmitFinal = (withEmail: boolean) => {
-    if (withEmail && !hasValidEmail) {
-      setError("Please enter a valid email, or click Skip to continue without one.");
-      scrollTop();
-      return;
-    }
+  const submitFinal = () => {
     setError("");
-    setSubmittedWithEmail(withEmail);
-    const payload = buildPayload(withEmail);
-    fetch("/api/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) }).catch(() => {});
+    fetch("/api/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(buildPayload()) }).catch(() => {});
     setDone(true);
     scrollTop();
   };
 
   const handleContinue = () => {
-    if (!validateCurrentStep()) { scrollTop(); return; }
+    if (!validate()) { scrollTop(); return; }
     setError("");
-    if (isFinalStep) { handleSubmitFinal(true); return; }
+    if (isFinalStep) { submitFinal(); return; }
     setStep(step + 1);
     scrollTop();
   };
 
-  const handleEmailSubmit = () => handleSubmitFinal(true);
-  const handleEmailSkip = () => handleSubmitFinal(false);
-  const handleBack = () => { setError(""); if (step > 1) { setStep(step - 1); scrollTop(); } };
-
-  let submitLabel = "Continue →";
-  if (isFinalStep && !isEmailStep) submitLabel = "Get my 30% off \u{1F381}";
+  const handleBack = () => {
+    setError("");
+    if (step > 1) { setStep(step - 1); scrollTop(); }
+  };
 
   if (done) {
-    const submittedEmail = submittedWithEmail === true;
     return (
       <main className="mx-auto max-w-3xl px-6 pb-16 pt-12">
-        <section className={`rounded-3xl border p-10 text-center shadow-sm ${submittedEmail ? "border-green-200 bg-gradient-to-br from-green-50 via-white to-emerald-50" : "border-gray-200 bg-white"}`}>
-          {submittedEmail ? (
-            <>
-              <div className="mb-4 text-7xl">{"\u{1F381}"}</div>
-              <h2 className="mb-3 text-3xl font-extrabold leading-tight text-slate-900 md:text-4xl">Your surprises are unlocked {"✨"}</h2>
-              <p className="mx-auto mb-7 max-w-xl text-base leading-7 text-gray-600 md:text-lg">Thank you for sharing your feedback {"\u{1F49A}"} — you just unlocked something special:</p>
-              <ul className="mx-auto mb-7 max-w-md space-y-2 text-left text-sm leading-7 text-slate-700 md:text-base">
-                <li className="flex items-start gap-2"><span>{"✅"}</span><span><strong>30% OFF</strong> your next order — your code is below.</span></li>
-                <li className="flex items-start gap-2"><span>{"✅"}</span><span>A <strong>personalized offer</strong> emailed to you very soon {"\u{1F48C}"}</span></li>
-                <li className="flex items-start gap-2"><span>{"✅"}</span><span>Our <strong>thanks</strong> for helping us improve {"\u{1F49A}"}</span></li>
-              </ul>
-            </>
-          ) : (
-            <>
-              <div className="mb-4 text-6xl">{"\u{1F389}"}</div>
-              <h2 className="mb-3 text-3xl font-extrabold text-slate-900 md:text-4xl">Thank you for your feedback!</h2>
-              <p className="mx-auto mb-7 max-w-xl text-base leading-7 text-gray-600 md:text-lg">We really appreciate the time you took to share {"\u{1F49A}"}. Here&apos;s your <strong>20% OFF</strong> code to use on your next order.</p>
-            </>
-          )}
+        <section className="rounded-3xl border border-green-200 bg-gradient-to-br from-green-50 via-white to-emerald-50 p-10 text-center shadow-sm">
+          <div className="mb-4 text-7xl">🎁</div>
+          <h2 className="mb-3 text-3xl font-extrabold leading-tight text-slate-900 md:text-4xl">Thank you for your feedback! ✨</h2>
+          <p className="mx-auto mb-7 max-w-xl text-base leading-7 text-gray-600 md:text-lg">Your answers help us improve every part of your shopping experience 💚. As promised, here&apos;s your <strong>20% OFF</strong> code:</p>
           <div className="mx-auto mb-7 max-w-md rounded-2xl border-2 border-dashed border-green-700 bg-green-50 px-6 py-5">
-            <div className="mb-1 text-xs font-extrabold tracking-[0.18em] text-green-700">{"✨"} YOUR {finalDiscountLabel} CODE {"✨"}</div>
-            <div className="text-3xl font-extrabold tracking-wider text-slate-900">{finalCoupon}</div>
+            <div className="mb-1 text-xs font-extrabold tracking-[0.18em] text-green-700">✨ YOUR 20% OFF CODE ✨</div>
+            <div className="text-3xl font-extrabold tracking-wider text-slate-900">{COUPON}</div>
             <div className="mt-2 text-sm text-gray-600">Use this code at checkout on your next order.</div>
-            {submittedEmail && (<div className="mt-3 text-xs text-green-800">We&apos;ll also email this code + your personalized offer shortly. {"\u{1F4E9}"}</div>)}
+            {email.trim() && (<div className="mt-3 text-xs text-green-800">We&apos;ll also email this code and product updates to {email}. 📩</div>)}
           </div>
           <div className="flex flex-wrap justify-center gap-3">
-            <a href="https://www.znaturalfoods.com/" className="rounded-xl bg-green-700 px-6 py-3 font-extrabold text-white hover:bg-green-800">Start shopping {"→"}</a>
+            <a href="https://www.znaturalfoods.com/" className="rounded-xl bg-green-700 px-6 py-3 font-extrabold text-white hover:bg-green-800">Start shopping →</a>
             <a href="https://www.znaturalfoods.com/specials" className="rounded-xl border border-gray-300 bg-white px-6 py-3 font-extrabold text-slate-700 hover:border-gray-400">See current specials</a>
           </div>
         </section>
       </main>
     );
   }
-
-  const currentPathQuestion = step >= 2 && step <= 1 + pathQCount && activePath ? activePath.questions[step - 2] : null;
 
   return (
     <main className="mx-auto max-w-3xl px-6 pb-16 pt-12">
@@ -529,46 +302,78 @@ export default function MiddleSection({ title, subtitle }: MiddleSectionProps) {
         <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-gray-500 md:text-xl md:leading-8">{subtitle}</p>
         <ProgressDots current={step} total={totalSteps} />
       </section>
+
       {error && (<div className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>)}
-      {step === 1 && (<QuestionCard question={sortingQuestion} index={1} total={totalSteps} selected={sortingAnswer} freeText={sortingFreeText} onSelect={handleSortingSelect} onFreeTextChange={setSortingFreeText} />)}
-      {currentPathQuestion && (<QuestionCard question={currentPathQuestion} index={step} total={totalSteps} selected={pathAnswers[currentPathQuestion.id]?.mc ?? ""} freeText={pathAnswers[currentPathQuestion.id]?.text ?? ""} onSelect={(id) => handlePathAnswerSelect(currentPathQuestion.id, id)} onFreeTextChange={(t) => handlePathFreeTextChange(currentPathQuestion.id, t)} />)}
+
+      {currentQ && (
+        <section className="rounded-2xl border border-gray-200 bg-white p-7 shadow-sm md:p-9">
+          <div className="mb-3 text-xs font-extrabold tracking-[0.18em] text-green-700">
+            QUESTION {step} OF {totalQ}{currentQ.type === "multi" ? " · SELECT ALL THAT APPLY" : currentQ.type === "single" ? " · PICK ONE" : ""}
+          </div>
+          <h2 className="mb-7 text-2xl font-extrabold text-slate-900 md:text-3xl">{currentQ.title}</h2>
+
+          {currentQ.type === "multi" && (
+            <div className="grid gap-3 md:grid-cols-2">
+              {currentQ.answers!.map((a) => {
+                const selected = (multi[currentQ.id] || []).includes(a.id);
+                return (
+                  <button key={a.id} type="button" onClick={() => toggleMulti(currentQ.id, a.id)} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${selected ? "border-green-700 bg-green-50 shadow-sm" : "border-gray-200 bg-white hover:border-green-600 hover:shadow-sm"}`}>
+                    <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 ${selected ? "border-green-700 bg-green-700" : "border-gray-300 bg-white"}`}>
+                      {selected && (<svg className="h-3 w-3 text-white" viewBox="0 0 12 12" fill="none"><path d="M2.5 6.5l2.5 2.5L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>)}
+                    </span>
+                    <span className="text-[15px] font-medium text-slate-900">{a.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {currentQ.type === "single" && (
+            <div className="grid gap-3 md:grid-cols-2">
+              {currentQ.answers!.map((a) => {
+                const selected = single[currentQ.id] === a.id;
+                return (
+                  <button key={a.id} type="button" onClick={() => pickSingle(currentQ.id, a.id)} className={`flex items-center gap-3 rounded-xl border p-4 text-left transition ${selected ? "border-green-700 bg-green-50 shadow-sm" : "border-gray-200 bg-white hover:border-green-600 hover:shadow-sm"}`}>
+                    <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${selected ? "border-green-700 bg-green-700" : "border-gray-300 bg-white"}`}>
+                      {selected && (<span className="h-2 w-2 rounded-full bg-white" />)}
+                    </span>
+                    <span className="text-[15px] font-medium text-slate-900">{a.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {currentQ.type === "text" && (
+            <textarea value={textAns[currentQ.id] || ""} onChange={(e) => setText(currentQ.id, e.target.value)} rows={6} className="w-full resize-y rounded-xl border border-gray-300 px-4 py-3 text-[15px] outline-none focus:border-green-600" placeholder="Type your answer here..." />
+          )}
+
+          {(currentQ.type === "multi" || currentQ.type === "single") && (
+            <div className="mt-6">
+              <label className="mb-2 block text-sm font-semibold text-slate-700">Add a few words (optional) <span className="font-normal text-gray-400">— for &quot;Other&quot; or extra context</span></label>
+              <textarea value={freeTexts[currentQ.id] || ""} onChange={(e) => setFreeText(currentQ.id, e.target.value)} rows={2} className="w-full resize-y rounded-xl border border-gray-300 px-4 py-3 text-[15px] outline-none focus:border-green-600" placeholder="Add a few words here..." />
+            </div>
+          )}
+        </section>
+      )}
+
       {isEmailStep && (
         <section className="overflow-hidden rounded-3xl border-2 border-green-200 bg-gradient-to-br from-green-50 via-white to-emerald-50 p-8 shadow-md md:p-10">
-          <div className="mb-3 text-center text-7xl">{"\u{1F381}"}</div>
-          <h2 className="mb-3 text-center text-3xl font-extrabold leading-tight text-slate-900 md:text-4xl">We have a special surprise for you!</h2>
-          <p className="mx-auto mb-8 max-w-xl text-center text-base leading-7 text-gray-600 md:text-lg">Drop your email and unlock a bigger discount <span className="whitespace-nowrap">— plus a personalized offer</span> made just for you. {"\u{1F48C}"}</p>
-          <div className="mx-auto mb-8 grid max-w-2xl gap-3 sm:grid-cols-2">
-            <div className="relative rounded-2xl border-2 border-green-700 bg-white px-5 py-6 text-center shadow-sm">
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-green-700 px-3 py-1 text-[10px] font-extrabold uppercase tracking-widest text-white">Best deal</div>
-              <div className="mb-1 text-xs font-extrabold uppercase tracking-[0.15em] text-green-700">With email</div>
-              <div className="text-4xl font-extrabold text-green-700">30% OFF</div>
-              <div className="mt-2 text-xs leading-5 text-gray-600">+ a personalized offer just for you {"\u{1F48C}"}</div>
-            </div>
-            <div className="rounded-2xl border border-gray-200 bg-white px-5 py-6 text-center">
-              <div className="mb-1 text-xs font-extrabold uppercase tracking-[0.15em] text-gray-400">Skip</div>
-              <div className="text-4xl font-extrabold text-slate-700">20% OFF</div>
-              <div className="mt-2 text-xs leading-5 text-gray-500">No follow-up — quick and easy</div>
-            </div>
-          </div>
+          <div className="mb-3 text-center text-6xl">💌</div>
+          <h2 className="mb-3 text-center text-3xl font-extrabold leading-tight text-slate-900 md:text-4xl">One last thing — your email (optional)</h2>
+          <p className="mx-auto mb-7 max-w-xl text-center text-base leading-7 text-gray-600 md:text-lg">Drop your email below to get your 20% off code by email plus occasional product updates. You&apos;ll see the code on the next page either way.</p>
           <div className="mx-auto max-w-md">
             <label className="mb-2 block text-sm font-semibold text-slate-700">Your email <span className="font-normal text-gray-400">(optional)</span></label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-[15px] outline-none focus:border-green-600" />
-            <p className="mt-3 text-center text-xs text-gray-500">By entering your email, you agree to occasional marketing emails. Unsubscribe any time.</p>
+            <p className="mt-3 text-center text-xs text-gray-500">If you give your email, you agree to occasional marketing emails. Unsubscribe any time.</p>
           </div>
         </section>
       )}
-      {isEmailStep ? (
-        <div className="mt-7 grid grid-cols-3 items-center gap-3">
-          <div className="flex justify-start"><button type="button" onClick={handleBack} className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:border-gray-400">{"←"} Back</button></div>
-          <div className="flex justify-center"><button type="button" onClick={handleEmailSubmit} className="rounded-xl bg-green-700 px-8 py-4 text-base font-extrabold text-white shadow-md hover:bg-green-800 md:px-10 md:text-lg">Submit & get 30% off {"\u{1F381}"}</button></div>
-          <div className="flex justify-end"><button type="button" onClick={handleEmailSkip} className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:border-gray-400">Skip {"→"} 20% off</button></div>
-        </div>
-      ) : (
-        <div className="mt-7 flex items-center justify-between gap-3">
-          <button type="button" onClick={handleBack} disabled={step === 1} className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:border-gray-400 disabled:opacity-40">{"←"} Back</button>
-          <button type="button" onClick={handleContinue} className="rounded-xl bg-green-700 px-7 py-3 text-base font-extrabold text-white shadow-sm hover:bg-green-800">{submitLabel}</button>
-        </div>
-      )}
+
+      <div className="mt-7 flex items-center justify-between gap-3">
+        <button type="button" onClick={handleBack} disabled={step === 1} className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:border-gray-400 disabled:opacity-40">← Back</button>
+        <button type="button" onClick={handleContinue} className="rounded-xl bg-green-700 px-7 py-3 text-base font-extrabold text-white shadow-sm hover:bg-green-800">{isFinalStep ? "Get my 20% off 🎁" : "Continue →"}</button>
+      </div>
     </main>
   );
 }
