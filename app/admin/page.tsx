@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { supabase } from "@/lib/supabase";
+import { questions, COUPON_CODE } from "@/lib/questions";
 import ResetButton from "./ResetButton";
 
 export const dynamic = "force-dynamic";
@@ -27,16 +28,6 @@ type SubmissionRow = {
   answers: unknown;
 };
 
-type QStat = {
-  questionId: string;
-  questionTitle: string;
-  type: "multi" | "single" | "text";
-  total: number;
-  options: Map<string, { label: string; count: number }>;
-  freeTexts: string[];
-  textAnswers: string[];
-};
-
 export default async function AdminPage({
   searchParams,
 }: {
@@ -51,9 +42,7 @@ export default async function AdminPage({
     return (
       <main className="mx-auto max-w-md p-8">
         <h1 className="text-2xl font-bold">Admin dashboard not configured</h1>
-        <p className="mt-2 text-gray-600">
-          Set <code className="rounded bg-gray-100 px-1">ADMIN_PASSWORD</code> in Vercel env vars.
-        </p>
+        <p className="mt-2 text-gray-600">Set <code className="rounded bg-gray-100 px-1">ADMIN_PASSWORD</code> in Vercel env vars.</p>
       </main>
     );
   }
@@ -64,9 +53,7 @@ export default async function AdminPage({
         <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
           <h1 className="mb-2 text-center text-2xl font-bold text-slate-900">Survey Admin</h1>
           <p className="mb-6 text-center text-sm text-gray-500">Enter the admin password to continue.</p>
-          {params.error === "invalid" && (
-            <div className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700">Wrong password.</div>
-          )}
+          {params.error === "invalid" && (<div className="mb-4 rounded bg-red-50 px-3 py-2 text-sm text-red-700">Wrong password.</div>)}
           <form method="POST" action="/api/admin/login" className="space-y-3">
             <input type="password" name="password" placeholder="Password" className="w-full rounded-xl border border-gray-300 px-4 py-3 outline-none focus:border-green-600" autoFocus required />
             <button type="submit" className="w-full rounded-xl bg-green-700 px-4 py-3 font-bold text-white hover:bg-green-800">Log in</button>
@@ -90,74 +77,53 @@ export default async function AdminPage({
     dbError = "Supabase not configured.";
   }
 
-  // Filter to only new survey submissions (path_id = main_v2 or whatever current is)
-  // Keep all for now; new submissions all have path="main_v2"
-  const total = submissions.length;
-  const withEmail = submissions.filter((s) => s.email).length;
+  // Only count submissions from the current (v2) survey
+  const current = submissions.filter((s) => s.path_id === "main_v2");
+  const total = current.length;
+  const withEmail = current.filter((s) => s.email).length;
   const withoutEmail = total - withEmail;
   const emailRate = total > 0 ? Math.round((withEmail / total) * 100) : 0;
 
-  // Aggregate per question
-  const qstats = new Map<string, QStat>();
-  const ensure = (id: string, title: string, type: "multi" | "single" | "text"): QStat => {
-    let q = qstats.get(id);
-    if (!q) {
-      q = { questionId: id, questionTitle: title, type, total: 0, options: new Map(), freeTexts: [], textAnswers: [] };
-      qstats.set(id, q);
-    }
-    return q;
+  // Build counts per question + answer using shared question definitions.
+  // Counts default to 0 for every answer in the schema, so unanswered options still show.
+  type QStat = {
+    question: typeof questions[number];
+    total: number; // submissions that reached this question
+    counts: Map<string, number>; // answerId -> count
+    freeTexts: string[];
+    textAnswers: string[];
   };
+  const stats: QStat[] = questions.map((q) => ({
+    question: q,
+    total: 0,
+    counts: new Map<string, number>((q.answers || []).map((a) => [a.id, 0])),
+    freeTexts: [],
+    textAnswers: [],
+  }));
+  const byId = new Map(stats.map((s) => [s.question.id, s]));
 
-  for (const s of submissions) {
-    if (!Array.isArray(s.answers)) continue;
-    for (const a of s.answers as AnswerEntry[]) {
-      if (!a?.questionId) continue;
-      const type = a.questionType || (a.answerIds && a.answerIds.length > 0 ? "multi" : "single");
-      const q = ensure(a.questionId, a.questionTitle || a.questionId, type);
-      q.total++;
-
-      if (type === "text") {
-        if (a.freeText && String(a.freeText).trim()) {
-          q.textAnswers.push(String(a.freeText).trim());
-        }
+  for (const sub of current) {
+    if (!Array.isArray(sub.answers)) continue;
+    for (const a of sub.answers as AnswerEntry[]) {
+      const stat = byId.get(a?.questionId || "");
+      if (!stat) continue;
+      stat.total++;
+      if (stat.question.type === "text") {
+        if (a.freeText && String(a.freeText).trim()) stat.textAnswers.push(String(a.freeText).trim());
         continue;
       }
-
-      // multi or single: extract array of selected ids/labels
-      let ids: string[] = [];
-      let labels: string[] = [];
-      if (a.answerIds && a.answerIds.length > 0) {
-        ids = a.answerIds;
-        labels = a.answerLabels || ids;
-      } else if (a.answerId) {
-        ids = [a.answerId];
-        labels = [a.answerLabel || a.answerId];
+      const ids = a.answerIds && a.answerIds.length > 0 ? a.answerIds : a.answerId ? [a.answerId] : [];
+      for (const id of ids) {
+        if (!stat.counts.has(id)) stat.counts.set(id, 0); // tolerate legacy ids
+        stat.counts.set(id, (stat.counts.get(id) || 0) + 1);
       }
-      ids.forEach((id, i) => {
-        let entry = q.options.get(id);
-        if (!entry) {
-          entry = { label: labels[i] || id, count: 0 };
-          q.options.set(id, entry);
-        }
-        entry.count++;
-      });
-
-      if (a.freeText && String(a.freeText).trim()) {
-        q.freeTexts.push(String(a.freeText).trim());
-      }
+      if (a.freeText && String(a.freeText).trim()) stat.freeTexts.push(String(a.freeText).trim());
     }
   }
 
-  // Sort questions by id (q1..q7)
-  const orderedQs = Array.from(qstats.values()).sort((a, b) =>
-    a.questionId.localeCompare(b.questionId, undefined, { numeric: true })
-  );
-
-  // Coupon distribution
-  const fb20 = submissions.filter((s) => s.coupon_code === "THANKYOU20").length;
-  const fb20Pct = total > 0 ? Math.round((fb20 / total) * 100) : 0;
-
-  const recent = submissions.slice(0, 30);
+  const fb = current.filter((s) => s.coupon_code === COUPON_CODE).length;
+  const fbPct = total > 0 ? Math.round((fb / total) * 100) : 0;
+  const recent = current.slice(0, 30);
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-10">
@@ -185,79 +151,70 @@ export default async function AdminPage({
         <SummaryCard label="Without email" value={withoutEmail} />
       </div>
 
-      {total === 0 ? (
-        <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-500">
-          No submissions yet — breakdowns appear here as data comes in.
-        </div>
-      ) : (
-        <>
-          <section className="mb-12">
-            <h2 className="mb-2 text-2xl font-extrabold text-slate-900">Question-by-question breakdown</h2>
-            <p className="mb-6 text-sm text-gray-500">
-              Multi-select questions can sum to over 100% because each respondent can pick multiple options.
-            </p>
-            <div className="space-y-5">
-              {orderedQs.map((q, qi) => {
-                const sortedOpts = Array.from(q.options.values()).sort((a, b) => b.count - a.count);
-                const typeLabel = q.type === "multi" ? "Select all that apply" : q.type === "single" ? "Pick one" : "Open text";
-                return (
-                  <div key={q.questionId} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:p-6">
-                    <div className="mb-1 text-[11px] font-extrabold uppercase tracking-widest text-green-700">
-                      Question {qi + 1} OF {orderedQs.length} · {typeLabel} · {q.total} response{q.total === 1 ? "" : "s"}
-                    </div>
-                    <h3 className="mb-4 text-lg font-extrabold text-slate-900 md:text-xl">{q.questionTitle}</h3>
+      <section className="mb-12">
+        <h2 className="mb-2 text-2xl font-extrabold text-slate-900">Question-by-question breakdown</h2>
+        <p className="mb-6 text-sm text-gray-500">
+          Every answer option is listed, even when 0 customers picked it. Multi-select percentages can sum above 100% because each respondent can pick multiple.
+        </p>
+        <div className="space-y-5">
+          {stats.map((s, qi) => {
+            const q = s.question;
+            const typeLabel = q.type === "multi" ? "Select all that apply" : q.type === "single" ? "Pick one" : "Open text";
+            const opts = q.type === "text" ? [] : (q.answers || []).map((a) => ({
+              id: a.id,
+              label: a.label,
+              count: s.counts.get(a.id) || 0,
+            })).sort((a, b) => b.count - a.count);
+            return (
+              <div key={q.id} className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm md:p-6">
+                <div className="mb-1 text-[11px] font-extrabold uppercase tracking-widest text-green-700">
+                  Question {qi + 1} OF {questions.length} · {typeLabel} · {s.total} response{s.total === 1 ? "" : "s"}
+                </div>
+                <h3 className="mb-4 text-lg font-extrabold text-slate-900 md:text-xl">{q.title}</h3>
 
-                    {q.type === "text" ? (
-                      q.textAnswers.length === 0 ? (
-                        <div className="text-sm text-gray-500">No written answers yet.</div>
-                      ) : (
-                        <ul className="space-y-2">
-                          {q.textAnswers.map((t, i) => (
-                            <li key={i} className="border-l-2 border-green-600 pl-3 text-sm italic text-slate-700">&ldquo;{t}&rdquo;</li>
-                          ))}
-                        </ul>
-                      )
-                    ) : sortedOpts.length === 0 ? (
-                      <div className="text-sm text-gray-500">No responses yet.</div>
-                    ) : (
-                      <div className="space-y-2">
-                        {sortedOpts.map((o, oi) => {
-                          const pct = q.total > 0 ? Math.round((o.count / q.total) * 100) : 0;
-                          return <Bar key={oi} label={o.label} count={o.count} pct={pct} />;
-                        })}
-                      </div>
-                    )}
-
-                    {q.type !== "text" && q.freeTexts.length > 0 && (
-                      <div className="mt-5 rounded-xl bg-gray-50 p-4">
-                        <div className="mb-2 text-xs font-extrabold uppercase tracking-wider text-gray-500">Written comments ({q.freeTexts.length})</div>
-                        <ul className="space-y-2">
-                          {q.freeTexts.map((t, i) => (
-                            <li key={i} className="border-l-2 border-green-600 pl-3 text-sm italic text-slate-700">&ldquo;{t}&rdquo;</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                {q.type === "text" ? (
+                  s.textAnswers.length === 0 ? (
+                    <div className="text-sm text-gray-500">No written answers yet.</div>
+                  ) : (
+                    <ul className="space-y-2">
+                      {s.textAnswers.map((t, i) => (<li key={i} className="border-l-2 border-green-600 pl-3 text-sm italic text-slate-700">&ldquo;{t}&rdquo;</li>))}
+                    </ul>
+                  )
+                ) : (
+                  <div className="space-y-2">
+                    {opts.map((o) => {
+                      const pct = s.total > 0 ? Math.round((o.count / s.total) * 100) : 0;
+                      return <Bar key={o.id} label={o.label} count={o.count} pct={pct} />;
+                    })}
                   </div>
-                );
-              })}
-            </div>
-          </section>
+                )}
 
-          <section className="mb-10">
-            <h2 className="mb-4 text-2xl font-extrabold text-slate-900">Coupon issued</h2>
-            <div className="rounded-2xl border-2 border-dashed border-green-700 bg-green-50 p-6">
-              <div className="text-xs font-extrabold uppercase tracking-wider text-green-700">Coupon</div>
-              <div className="my-1 text-3xl font-extrabold tracking-wider text-slate-900">THANKYOU20</div>
-              <div className="mb-4 text-sm text-slate-700">20% OFF — given to every customer who completed the survey</div>
-              <div className="rounded-xl bg-white p-3 text-center">
-                <div className="text-3xl font-extrabold text-green-700">({fb20}) {fb20Pct}%</div>
-                <div className="text-xs text-gray-500">{fb20 === 1 ? "customer" : "customers"} received this code</div>
+                {q.type !== "text" && s.freeTexts.length > 0 && (
+                  <div className="mt-5 rounded-xl bg-gray-50 p-4">
+                    <div className="mb-2 text-xs font-extrabold uppercase tracking-wider text-gray-500">Written comments ({s.freeTexts.length})</div>
+                    <ul className="space-y-2">
+                      {s.freeTexts.map((t, i) => (<li key={i} className="border-l-2 border-green-600 pl-3 text-sm italic text-slate-700">&ldquo;{t}&rdquo;</li>))}
+                    </ul>
+                  </div>
+                )}
               </div>
-            </div>
-          </section>
-        </>
-      )}
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="mb-4 text-2xl font-extrabold text-slate-900">Coupon issued</h2>
+        <div className="rounded-2xl border-2 border-dashed border-green-700 bg-green-50 p-6">
+          <div className="text-xs font-extrabold uppercase tracking-wider text-green-700">Coupon</div>
+          <div className="my-1 text-3xl font-extrabold tracking-wider text-slate-900">{COUPON_CODE}</div>
+          <div className="mb-4 text-sm text-slate-700">20% OFF — given to every customer who completed the survey</div>
+          <div className="rounded-xl bg-white p-3 text-center">
+            <div className="text-3xl font-extrabold text-green-700">({fb}) {fbPct}%</div>
+            <div className="text-xs text-gray-500">{fb === 1 ? "customer" : "customers"} received this code</div>
+          </div>
+        </div>
+      </section>
 
       <section className="mb-8 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
         <div className="border-b border-gray-200 px-6 py-4 text-lg font-bold text-slate-900">Recent submissions</div>
@@ -297,13 +254,16 @@ function SummaryCard({ label, value, sub, highlight }: { label: string; value: n
 }
 
 function Bar({ label, count, pct }: { label: string; count: number; pct: number }) {
+  const zero = count === 0;
   return (
     <div className="flex items-center gap-3">
-      <div className="w-64 shrink-0 text-sm font-medium text-slate-800">{label}</div>
+      <div className={`w-64 shrink-0 text-sm ${zero ? "text-gray-400" : "font-medium text-slate-800"}`}>{label}</div>
       <div className="h-6 flex-1 overflow-hidden rounded-full bg-gray-100">
-        <div className="h-full rounded-full bg-green-600" style={{ width: `${pct}%` }} />
+        <div className={`h-full rounded-full ${zero ? "bg-gray-200" : "bg-green-600"}`} style={{ width: `${Math.max(pct, zero ? 0 : 2)}%` }} />
       </div>
-      <div className="w-24 shrink-0 text-right text-sm tabular-nums text-slate-700"><span className="font-bold">({count})</span> {pct}%</div>
+      <div className={`w-24 shrink-0 text-right text-sm tabular-nums ${zero ? "text-gray-400" : "text-slate-700"}`}>
+        <span className="font-bold">({count})</span> {pct}%
+      </div>
     </div>
   );
 }
