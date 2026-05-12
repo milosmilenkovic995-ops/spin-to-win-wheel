@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 type MCAnswer = { id: string; label: string };
 type QuestionType = "multi" | "single" | "text";
@@ -11,7 +11,7 @@ type Question = {
 };
 type MiddleSectionProps = { title: string; subtitle: string };
 
-const COUPON = "FEEDBACK20";
+const COUPON = "THANKYOU20";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const questions: Question[] = [
@@ -36,34 +36,31 @@ const questions: Question[] = [
   },
   {
     id: "q2",
-    title: "When browsing our website, what frustrates you the most?",
+    title: "Which of these have made browsing our website harder for you?",
     type: "multi",
     answers: [
-      { id: "slow", label: "Pages load too slowly" },
-      { id: "hard_find", label: "Hard to find what I'm looking for" },
-      { id: "menu", label: "Navigation menu is confusing" },
-      { id: "search", label: "Search function doesn't return good results" },
-      { id: "popups", label: "Too many pop-ups or distractions" },
-      { id: "mobile", label: "Site doesn't work well on mobile" },
-      { id: "images", label: "Images load slowly or look low quality" },
-      { id: "nothing", label: "Nothing — the site works fine for me" },
+      { id: "slow", label: "Slow loading times" },
+      { id: "navigate", label: "Hard to navigate between pages" },
+      { id: "menu", label: "Confusing menu structure" },
+      { id: "search", label: "Search results aren't helpful" },
+      { id: "mobile", label: "Poor mobile experience" },
+      { id: "popups", label: "Distracting pop-ups or banners" },
+      { id: "media", label: "Images or videos don't load properly" },
+      { id: "crash", label: "Site crashes or shows errors" },
+      { id: "nothing", label: "Nothing — it works well for me" },
       { id: "other", label: "Other (please specify)" },
     ],
   },
   {
     id: "q3",
-    title: "On our product pages, what's missing or could be better?",
+    title: "What's missing or unclear on our product pages?",
     type: "multi",
     answers: [
-      { id: "photos_count", label: "Not enough product photos" },
-      { id: "photos_clarity", label: "Photos don't show the product clearly" },
-      { id: "descriptions", label: "Product descriptions lack detail" },
-      { id: "sizing", label: "Sizing or dimensions are unclear" },
-      { id: "reviews", label: "No customer reviews visible" },
-      { id: "pricing", label: "Price or discounts aren't clear" },
-      { id: "shipping_info", label: "Shipping info isn't visible early enough" },
-      { id: "stock", label: "Stock availability is unclear" },
-      { id: "compare", label: "Hard to compare similar products" },
+      { id: "real_use_photos", label: "Photos of the product in real use" },
+      { id: "short_desc", label: "A shorter, benefit-focused description as an alternative to the long one" },
+      { id: "shipping_upfront", label: "Upfront shipping cost and delivery time" },
+      { id: "stock", label: "Clear stock availability" },
+      { id: "compare", label: "Easier way to compare products" },
       { id: "other", label: "Other (please specify)" },
     ],
   },
@@ -132,22 +129,28 @@ function ProgressDots({ current, total }: { current: number; total: number }) {
   );
 }
 
+function CouponBox() {
+  return (
+    <div className="mx-auto mb-7 max-w-md rounded-2xl border-2 border-dashed border-green-700 bg-green-50 px-6 py-5 text-center">
+      <div className="mb-1 text-xs font-extrabold tracking-[0.18em] text-green-700">✨ YOUR 20% OFF CODE ✨</div>
+      <div className="text-3xl font-extrabold tracking-wider text-slate-900">{COUPON}</div>
+      <div className="mt-2 text-sm text-gray-600">Use this code at checkout on your next order.</div>
+    </div>
+  );
+}
+
 export default function MiddleSection({ title, subtitle }: MiddleSectionProps) {
   const [step, setStep] = useState(1);
   const [done, setDone] = useState(false);
+  const [submittedWithEmail, setSubmittedWithEmail] = useState<boolean>(false);
 
-  // For multi-select: question id -> array of selected answer ids
   const [multi, setMulti] = useState<Record<string, string[]>>({});
-  // For single-select: question id -> selected answer id
   const [single, setSingle] = useState<Record<string, string>>({});
-  // Text answer for text-only questions
   const [textAns, setTextAns] = useState<Record<string, string>>({});
-  // Optional "Add a few words" free-text per MC question
   const [freeTexts, setFreeTexts] = useState<Record<string, string>>({});
 
   const [email, setEmail] = useState("");
   const [klid, setKlid] = useState("");
-  const [emailFromUrl, setEmailFromUrl] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -155,14 +158,13 @@ export default function MiddleSection({ title, subtitle }: MiddleSectionProps) {
     const p = new URLSearchParams(window.location.search);
     const e = p.get("email") || "";
     const k = p.get("klid") || p.get("kl_id") || "";
-    if (e) { setEmail(e); setEmailFromUrl(true); }
+    if (e) setEmail(e);
     if (k) setKlid(k);
   }, []);
 
-  const totalQ = questions.length; // 7
-  const totalSteps = totalQ + (emailFromUrl ? 0 : 1); // +1 for email page
-  const isEmailStep = !emailFromUrl && step === totalSteps;
-  const isFinalStep = step === totalSteps;
+  const totalQ = questions.length;
+  const totalSteps = totalQ + 1; // 8 dots total
+  const isCouponStep = step === totalSteps; // step 8
   const currentQ = step <= totalQ ? questions[step - 1] : null;
 
   const scrollTop = () => { if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" }); };
@@ -183,7 +185,7 @@ export default function MiddleSection({ title, subtitle }: MiddleSectionProps) {
   const setText = (qid: string, t: string) => setTextAns((prev) => ({ ...prev, [qid]: t }));
 
   const validate = (): boolean => {
-    if (!currentQ) return true; // email step, no validation
+    if (!currentQ) return true;
     if (currentQ.type === "multi") {
       if (!multi[currentQ.id] || multi[currentQ.id].length === 0) {
         setError("Please select at least one option to continue.");
@@ -195,66 +197,53 @@ export default function MiddleSection({ title, subtitle }: MiddleSectionProps) {
         return false;
       }
     }
-    // text type: optional, no validation
     return true;
   };
 
-  const buildPayload = () => {
-    return {
-      email: email.trim() || null,
-      klid: klid.trim() || null,
-      path: "main_v2",
-      pathName: "Customer Feedback Survey",
-      submittedVia: email.trim() ? "email" : "skip",
-      coupon: COUPON,
-      discount: "20% OFF",
-      sorting: null,
-      answers: questions.map((q) => {
-        if (q.type === "multi") {
-          const ids = multi[q.id] || [];
-          const labels = ids.map((id) => q.answers!.find((a) => a.id === id)?.label || id);
-          return {
-            questionId: q.id,
-            questionTitle: q.title,
-            questionType: "multi",
-            answerIds: ids,
-            answerLabels: labels,
-            answerId: ids[0] || "",
-            answerLabel: labels[0] || "",
-            freeText: (freeTexts[q.id] || "").trim() || null,
-          };
-        } else if (q.type === "single") {
-          const id = single[q.id] || "";
-          const label = q.answers!.find((a) => a.id === id)?.label || "";
-          return {
-            questionId: q.id,
-            questionTitle: q.title,
-            questionType: "single",
-            answerIds: id ? [id] : [],
-            answerLabels: label ? [label] : [],
-            answerId: id,
-            answerLabel: label,
-            freeText: (freeTexts[q.id] || "").trim() || null,
-          };
-        } else {
-          return {
-            questionId: q.id,
-            questionTitle: q.title,
-            questionType: "text",
-            answerIds: [],
-            answerLabels: [],
-            answerId: "",
-            answerLabel: "",
-            freeText: (textAns[q.id] || "").trim() || null,
-          };
-        }
-      }),
-      submittedAt: new Date().toISOString(),
-    };
-  };
+  const hasValidEmail = email.trim().length > 0 && EMAIL_REGEX.test(email.trim());
+
+  const buildPayload = () => ({
+    email: hasValidEmail ? email.trim() : null,
+    klid: klid.trim() || null,
+    path: "main_v2",
+    pathName: "Customer Feedback Survey",
+    submittedVia: hasValidEmail ? "email" : "skip",
+    coupon: COUPON,
+    discount: "20% OFF",
+    sorting: null,
+    answers: questions.map((q) => {
+      if (q.type === "multi") {
+        const ids = multi[q.id] || [];
+        const labels = ids.map((id) => q.answers!.find((a) => a.id === id)?.label || id);
+        return {
+          questionId: q.id, questionTitle: q.title, questionType: "multi",
+          answerIds: ids, answerLabels: labels,
+          answerId: ids[0] || "", answerLabel: labels[0] || "",
+          freeText: (freeTexts[q.id] || "").trim() || null,
+        };
+      } else if (q.type === "single") {
+        const id = single[q.id] || "";
+        const label = q.answers!.find((a) => a.id === id)?.label || "";
+        return {
+          questionId: q.id, questionTitle: q.title, questionType: "single",
+          answerIds: id ? [id] : [], answerLabels: label ? [label] : [],
+          answerId: id, answerLabel: label,
+          freeText: (freeTexts[q.id] || "").trim() || null,
+        };
+      } else {
+        return {
+          questionId: q.id, questionTitle: q.title, questionType: "text",
+          answerIds: [], answerLabels: [], answerId: "", answerLabel: "",
+          freeText: (textAns[q.id] || "").trim() || null,
+        };
+      }
+    }),
+    submittedAt: new Date().toISOString(),
+  });
 
   const submitFinal = () => {
     setError("");
+    setSubmittedWithEmail(hasValidEmail);
     fetch("/api/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(buildPayload()) }).catch(() => {});
     setDone(true);
     scrollTop();
@@ -263,7 +252,7 @@ export default function MiddleSection({ title, subtitle }: MiddleSectionProps) {
   const handleContinue = () => {
     if (!validate()) { scrollTop(); return; }
     setError("");
-    if (isFinalStep) { submitFinal(); return; }
+    if (isCouponStep) { submitFinal(); return; }
     setStep(step + 1);
     scrollTop();
   };
@@ -273,19 +262,35 @@ export default function MiddleSection({ title, subtitle }: MiddleSectionProps) {
     if (step > 1) { setStep(step - 1); scrollTop(); }
   };
 
+  /* ---------------- Done state (after submit) ---------------- */
   if (done) {
+    if (submittedWithEmail) {
+      return (
+        <main className="mx-auto max-w-3xl px-6 pb-16 pt-12">
+          <section className="rounded-3xl border-2 border-green-200 bg-gradient-to-br from-green-50 via-white to-emerald-50 p-10 text-center shadow-md">
+            <div className="mb-4 text-7xl">💌</div>
+            <h2 className="mb-3 text-3xl font-extrabold leading-tight text-slate-900 md:text-4xl">Your personal offer is on the way! ✨</h2>
+            <p className="mx-auto mb-7 max-w-xl text-base leading-7 text-gray-600 md:text-lg">
+              Thanks again 💚 — we&apos;ll send a personalized offer to <strong>{email.trim()}</strong> very soon. Keep an eye on your inbox.
+            </p>
+            <CouponBox />
+            <p className="mb-6 text-sm text-gray-500">Your 20% off code is yours to use right away — no need to wait for the email.</p>
+            <div className="flex flex-wrap justify-center gap-3">
+              <a href="https://www.znaturalfoods.com/" className="rounded-xl bg-green-700 px-6 py-3 font-extrabold text-white hover:bg-green-800">Start shopping →</a>
+              <a href="https://www.znaturalfoods.com/specials" className="rounded-xl border border-gray-300 bg-white px-6 py-3 font-extrabold text-slate-700 hover:border-gray-400">See current specials</a>
+            </div>
+          </section>
+        </main>
+      );
+    }
+    // No-email confirmation
     return (
       <main className="mx-auto max-w-3xl px-6 pb-16 pt-12">
-        <section className="rounded-3xl border border-green-200 bg-gradient-to-br from-green-50 via-white to-emerald-50 p-10 text-center shadow-sm">
-          <div className="mb-4 text-7xl">🎁</div>
-          <h2 className="mb-3 text-3xl font-extrabold leading-tight text-slate-900 md:text-4xl">Thank you for your feedback! ✨</h2>
-          <p className="mx-auto mb-7 max-w-xl text-base leading-7 text-gray-600 md:text-lg">Your answers help us improve every part of your shopping experience 💚. As promised, here&apos;s your <strong>20% OFF</strong> code:</p>
-          <div className="mx-auto mb-7 max-w-md rounded-2xl border-2 border-dashed border-green-700 bg-green-50 px-6 py-5">
-            <div className="mb-1 text-xs font-extrabold tracking-[0.18em] text-green-700">✨ YOUR 20% OFF CODE ✨</div>
-            <div className="text-3xl font-extrabold tracking-wider text-slate-900">{COUPON}</div>
-            <div className="mt-2 text-sm text-gray-600">Use this code at checkout on your next order.</div>
-            {email.trim() && (<div className="mt-3 text-xs text-green-800">We&apos;ll also email this code and product updates to {email}. 📩</div>)}
-          </div>
+        <section className="rounded-3xl border border-gray-200 bg-white p-10 text-center shadow-sm">
+          <div className="mb-4 text-6xl">🎉</div>
+          <h2 className="mb-3 text-3xl font-extrabold text-slate-900 md:text-4xl">You&apos;re all set!</h2>
+          <p className="mx-auto mb-7 max-w-xl text-base leading-7 text-gray-600 md:text-lg">Thanks again for your feedback 💚. Here&apos;s your code — use it whenever you&apos;re ready.</p>
+          <CouponBox />
           <div className="flex flex-wrap justify-center gap-3">
             <a href="https://www.znaturalfoods.com/" className="rounded-xl bg-green-700 px-6 py-3 font-extrabold text-white hover:bg-green-800">Start shopping →</a>
             <a href="https://www.znaturalfoods.com/specials" className="rounded-xl border border-gray-300 bg-white px-6 py-3 font-extrabold text-slate-700 hover:border-gray-400">See current specials</a>
@@ -295,6 +300,7 @@ export default function MiddleSection({ title, subtitle }: MiddleSectionProps) {
     );
   }
 
+  /* ---------------- Active survey ---------------- */
   return (
     <main className="mx-auto max-w-3xl px-6 pb-16 pt-12">
       <section className="mb-8 text-center">
@@ -357,22 +363,34 @@ export default function MiddleSection({ title, subtitle }: MiddleSectionProps) {
         </section>
       )}
 
-      {isEmailStep && (
+      {/* Step 8: Thank-you with coupon + optional email */}
+      {isCouponStep && (
         <section className="overflow-hidden rounded-3xl border-2 border-green-200 bg-gradient-to-br from-green-50 via-white to-emerald-50 p-8 shadow-md md:p-10">
-          <div className="mb-3 text-center text-6xl">💌</div>
-          <h2 className="mb-3 text-center text-3xl font-extrabold leading-tight text-slate-900 md:text-4xl">One last thing — your email (optional)</h2>
-          <p className="mx-auto mb-7 max-w-xl text-center text-base leading-7 text-gray-600 md:text-lg">Drop your email below to get your 20% off code by email plus occasional product updates. You&apos;ll see the code on the next page either way.</p>
-          <div className="mx-auto max-w-md">
-            <label className="mb-2 block text-sm font-semibold text-slate-700">Your email <span className="font-normal text-gray-400">(optional)</span></label>
+          <div className="mb-3 text-center text-6xl">💚</div>
+          <h2 className="mb-3 text-center text-2xl font-extrabold leading-tight text-slate-900 md:text-4xl">
+            Thank you for your time — we really appreciate it!
+          </h2>
+          <p className="mx-auto mb-7 max-w-xl text-center text-base leading-7 text-gray-600 md:text-lg">
+            Here&apos;s your coupon code for instant use:
+          </p>
+
+          <CouponBox />
+
+          <div className="mx-auto mt-2 max-w-md">
+            <label className="mb-2 block text-sm font-semibold text-slate-700">
+              If you want us to send you a personal offer, put email{" "}
+              <span className="font-normal text-gray-400">(optional)</span>
+            </label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-[15px] outline-none focus:border-green-600" />
-            <p className="mt-3 text-center text-xs text-gray-500">If you give your email, you agree to occasional marketing emails. Unsubscribe any time.</p>
           </div>
         </section>
       )}
 
       <div className="mt-7 flex items-center justify-between gap-3">
         <button type="button" onClick={handleBack} disabled={step === 1} className="rounded-xl border border-gray-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:border-gray-400 disabled:opacity-40">← Back</button>
-        <button type="button" onClick={handleContinue} className="rounded-xl bg-green-700 px-7 py-3 text-base font-extrabold text-white shadow-sm hover:bg-green-800">{isFinalStep ? "Get my 20% off 🎁" : "Continue →"}</button>
+        <button type="button" onClick={handleContinue} className="rounded-xl bg-green-700 px-7 py-3 text-base font-extrabold text-white shadow-sm hover:bg-green-800">
+          {isCouponStep ? (hasValidEmail ? "Send me my personal offer 🎁" : "Finish survey →") : "Continue →"}
+        </button>
       </div>
     </main>
   );

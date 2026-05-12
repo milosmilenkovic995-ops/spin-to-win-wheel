@@ -154,7 +154,7 @@ export default async function AdminPage({
   );
 
   // Coupon distribution
-  const fb20 = submissions.filter((s) => s.coupon_code === "FEEDBACK20").length;
+  const fb20 = submissions.filter((s) => s.coupon_code === "THANKYOU20").length;
   const fb20Pct = total > 0 ? Math.round((fb20 / total) * 100) : 0;
 
   const recent = submissions.slice(0, 30);
@@ -248,7 +248,7 @@ export default async function AdminPage({
             <h2 className="mb-4 text-2xl font-extrabold text-slate-900">Coupon issued</h2>
             <div className="rounded-2xl border-2 border-dashed border-green-700 bg-green-50 p-6">
               <div className="text-xs font-extrabold uppercase tracking-wider text-green-700">Coupon</div>
-              <div className="my-1 text-3xl font-extrabold tracking-wider text-slate-900">FEEDBACK20</div>
+              <div className="my-1 text-3xl font-extrabold tracking-wider text-slate-900">THANKYOU20</div>
               <div className="mb-4 text-sm text-slate-700">20% OFF — given to every customer who completed the survey</div>
               <div className="rounded-xl bg-white p-3 text-center">
                 <div className="text-3xl font-extrabold text-green-700">({fb20}) {fb20Pct}%</div>
