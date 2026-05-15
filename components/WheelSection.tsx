@@ -15,7 +15,7 @@ interface PrizeConfig {
 
 const PRIZES: Record<PrizeType, PrizeConfig> = {
   "10off":    { title: "You Won 10% Off!",        label: "10% OFF",       code: "SAVE10",   description: "Save 10% on your entire order — no minimum required.",         emoji: "🎉" },
-  "20off":    { title: "You Won 20% Off!",        label: "20% OFF",       code: "SAVE20",   description: "Save 20% on your entire order — our biggest discount!",         emoji: "🎊" },
+  "20off":    { title: "You Won 20% Off!",        label: "20% OFF",       code: "SAVE20",   description: "Save 20% on orders above $50 — our biggest discount!",          emoji: "🎊" },
   freeship:   { title: "You Won Free Shipping!",  label: "FREE SHIPPING", code: "FREESHIP", description: "Free shipping on your next order — no minimum, no catches.",    emoji: "📦" },
 };
 
