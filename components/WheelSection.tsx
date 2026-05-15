@@ -225,11 +225,9 @@ export default function WheelSection() {
             <a href="https://www.znaturalfoods.com/specials" className="rounded-xl border border-gray-300 bg-white px-6 py-3 font-extrabold text-slate-700 hover:border-gray-400">See current specials</a>
           </div>
 
-          {process.env.NODE_ENV === "development" && (
-            <button onClick={() => { localStorage.removeItem(STORAGE_KEY); window.location.reload(); }} className="mt-6 text-xs text-gray-400 underline hover:text-gray-600">
-              [DEV] Reset wheel
-            </button>
-          )}
+          <button onClick={() => { localStorage.removeItem(STORAGE_KEY); window.location.reload(); }} className="mt-6 text-xs text-gray-400 underline hover:text-gray-600">
+            Reset wheel
+          </button>
         </section>
       </main>
     );
